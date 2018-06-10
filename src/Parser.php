@@ -19,9 +19,7 @@
 
 namespace Fabic\Nql;
 
-use Doctrine\Common\Annotations\AnnotationException;
-use Doctrine\Common\Collections\ArrayCollection AS Collection;
-use ReflectionClass;
+use Doctrine\Common\Annotations\AnnotationException; // todo: have our own exception cls.
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 
@@ -34,6 +32,8 @@ use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
  *      - ex. we may hash queries and store the final data after processing.
  *      - __or__ we may just cache the "root" raw values fetched through __apply()__,
  *        so as to e.g. avoid multiple database/ORM queries.
+ *
+ * * TODO: Remove those methods of the original `DocParser` impl. once we know we won't need these.
  *
  * @since 2018-05-29
  * @author Fabien Cadet <cadet.fabien@gmail.com>
@@ -70,18 +70,16 @@ class Parser
         $this->lexer = new Lexer;
     }
 
-    /**
-     * Parses the given query.
-     *
-     * @param string $input   The docblock string to parse.
-     * @param string $context The parsing context.
-     *
-     * @return array
-     */
-    public function parse($input, $context = '')
+	/**
+	 * Parses the given “NQL ”query.
+	 *
+	 * @param string $input The NQL query string to parse.
+	 *
+	 * @return array
+	 * @throws Exceptions\ParserException
+	 */
+    public function parse($input)
     {
-        $this->context = $context;
-
         $this->lexer->setInput($input);
         $this->lexer->moveNext();
 
@@ -93,8 +91,14 @@ class Parser
 	/**
 	 * Apply a (parsed) query to some `$root` value.
 	 *
-	 * @param array $entities
-	 * @param mixed $root
+	 * Note: recursive it is.
+	 *
+	 * TODO: SRP: move this apply() and related methods to some dedicated class,
+	 * TODO: SRP: once we can come up with a name for it, like Nql maybe?
+	 *
+	 * @param array $entities that which `parse()` yields.
+	 * @param mixed $root     the “root” data to be operated upon.
+	 *
 	 * @param PropertyAccessorInterface|null $pa
 	 *
 	 * @return array
@@ -222,6 +226,7 @@ class Parser
 	 * Entities ::= Entity ["," ...]
 	 *
 	 * @return array
+	 * @throws Exceptions\ParserException
 	 */
 	private function Entities()
 	{
@@ -256,6 +261,8 @@ class Parser
 	 * Entity ::= identifier ["#"(identifier|number)] ["|" (sort|where|filter|map) ":" <tbd> ] "{" Entities "}"
 	 *
 	 * todo: impl Identifier() to parse any valid property access string.
+	 *
+	 * @throws Exceptions\ParserException
 	 */
 	private function Entity()
 	{
@@ -296,6 +303,7 @@ class Parser
 			$name = $this->lexer->token['value'];
 		}
 
+		// todo: refactor these modifiers thing.
 		while ($this->lexer->lookahead['type'] == Lexer::T_PIPE) {
 			$this->match(Lexer::T_PIPE);
 			$token = $this->lexer->token;
@@ -330,6 +338,7 @@ class Parser
 	 * Sort ::= "sort:" <identifier> ["asc"|"desc"|<identifier>] [, ...]
 	 *
 	 * @return array
+	 * @throws Exceptions\ParserException
 	 */
 	private function SortModifier()
 	{
@@ -365,6 +374,7 @@ class Parser
 	 * Limit ::= "limit:" integer[,(integer|null)]
 	 *
 	 * @return array
+	 * @throws Exceptions\ParserException
 	 */
 	private function LimitModifier()
 	{
@@ -396,15 +406,15 @@ class Parser
 	//==-------------------------------------------------------------------==//
 	//==-------------------------------------------------------------------==//
 
-
-    /**
-     * Attempts to match the given token with the current lookahead token.
-     * If they match, updates the lookahead token; otherwise raises a syntax error.
-     *
-     * @param integer $token Type of token.
-     *
-     * @return boolean True if tokens match; false otherwise.
-     */
+	/**
+	 * Attempts to match the given token with the current lookahead token.
+	 * If they match, updates the lookahead token; otherwise raises a syntax error.
+	 *
+	 * @param integer $token Type of token.
+	 *
+	 * @return boolean True if tokens match; false otherwise.
+	 * @throws Exceptions\ParserException
+	 */
     private function match($token)
     {
         if ( ! $this->lexer->isNextToken($token) ) {
@@ -414,16 +424,17 @@ class Parser
         return $this->lexer->moveNext();
     }
 
-    /**
-     * Attempts to match the current lookahead token with any of the given tokens.
-     *
-     * If any of them matches, this method updates the lookahead token; otherwise
-     * a syntax error is raised.
-     *
-     * @param array $tokens
-     *
-     * @return boolean
-     */
+	/**
+	 * Attempts to match the current lookahead token with any of the given tokens.
+	 *
+	 * If any of them matches, this method updates the lookahead token; otherwise
+	 * a syntax error is raised.
+	 *
+	 * @param array $tokens
+	 *
+	 * @return boolean
+	 * @throws Exceptions\ParserException
+	 */
     private function matchAny(array $tokens)
     {
         if ( ! $this->lexer->isNextTokenAny($tokens)) {
@@ -441,7 +452,7 @@ class Parser
      *
      * @return void
      *
-     * @throws AnnotationException
+     * @throws Exceptions\ParserException
      */
     private function syntaxError($expected, $token = null)
     {
@@ -460,10 +471,51 @@ class Parser
 
         $message .= '.';
 
-        throw AnnotationException::syntaxError($message);
+        throw Exceptions\ParserException::syntaxError($message);
     }
 
-    /**
+
+	/**
+	 * Identifier ::= string
+	 *
+	 * TODO: review impl., simplify for our needs.
+	 *
+	 * @return string
+	 * @throws Exceptions\ParserException
+	 * @author Doctrine folks.
+	 */
+	private function Identifier()
+	{
+		// ~~check if we have an annotation~~
+		if ($this->lexer->isNextTokenAny(self::$classIdentifiers)) {
+			$this->lexer->moveNext();
+
+			$className = $this->lexer->token['value'];
+
+			while ($this->lexer->lookahead['position'] === ($this->lexer->token['position'] + strlen($this->lexer->token['value']))
+				&& $this->lexer->isNextToken(Lexer::T_NAMESPACE_SEPARATOR)) {
+
+				$this->match(Lexer::T_NAMESPACE_SEPARATOR);
+				$this->matchAny(self::$classIdentifiers);
+
+				$className .= '\\' . $this->lexer->token['value'];
+			}
+
+			return $className;
+		}
+
+		$identifier = $this->lexer->token['value'];
+		return $identifier;
+	}
+
+	// ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~
+	// ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~
+	// ~~  \Doctrine\Common\Annotations\DocParserDoctrine ~ ~ ~~ ~ ~~ ~ ~~ ~ ~~
+	// ~~  TODO: REMOVE THESE ONCE WE NO LONGER NEED INSPIRATION.  ~~ ~ ~~ ~ ~~
+	// ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~
+	// ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~ ~ ~~
+
+	/**
      * Attempts to check if a class exists or not. This never goes through the PHP autoloading mechanism
      * but uses the {@link AnnotationRegistry} to load classes.
      *
@@ -486,13 +538,14 @@ class Parser
         return $this->classExists[$fqcn] = AnnotationRegistry::loadAnnotationClass($fqcn);
     }
 
-    /**
-     * Collects parsing metadata for a given annotation class
-     *
-     * @param string $name The annotation name
-     *
-     * @return void
-     */
+	/**
+	 * Collects parsing metadata for a given annotation class
+	 *
+	 * @param string $name The annotation name
+	 *
+	 * @return void
+	 * @throws \ReflectionException
+	 */
     private function collectAnnotationMetadata($name)
     {
         if (self::$metadataParser === null) {
@@ -646,17 +699,18 @@ class Parser
         $metadata['attribute_types'][$attribute->name]['required'] = $attribute->required;
     }
 
-    /**
-     * Annotation     ::= "@" AnnotationName MethodCall
-     * AnnotationName ::= QualifiedName | SimpleName
-     * QualifiedName  ::= NameSpacePart "\" {NameSpacePart "\"}* SimpleName
-     * NameSpacePart  ::= identifier | null | false | true
-     * SimpleName     ::= identifier | null | false | true
-     *
-     * @return mixed False if it is not a valid annotation.
-     *
-     * @throws AnnotationException
-     */
+	/**
+	 * Annotation     ::= "@" AnnotationName MethodCall
+	 * AnnotationName ::= QualifiedName | SimpleName
+	 * QualifiedName  ::= NameSpacePart "\" {NameSpacePart "\"}* SimpleName
+	 * NameSpacePart  ::= identifier | null | false | true
+	 * SimpleName     ::= identifier | null | false | true
+	 *
+	 * @return mixed False if it is not a valid annotation.
+	 *
+	 * @throws AnnotationException
+	 * @throws \ReflectionException
+	 */
     private function Annotation()
     {
         $this->match(Lexer::T_AT);
@@ -818,11 +872,12 @@ class Parser
         return $instance;
     }
 
-    /**
-     * MethodCall ::= ["(" [Values] ")"]
-     *
-     * @return array
-     */
+	/**
+	 * MethodCall ::= ["(" [Values] ")"]
+	 *
+	 * @return array
+	 * @throws AnnotationException
+	 */
     private function MethodCall()
     {
         $values = array();
@@ -842,11 +897,12 @@ class Parser
         return $values;
     }
 
-    /**
-     * Values ::= Array | Value {"," Value}* [","]
-     *
-     * @return array
-     */
+	/**
+	 * Values ::= Array | Value {"," Value}* [","]
+	 *
+	 * @return array
+	 * @throws AnnotationException
+	 */
     private function Values()
     {
         $values = array($this->Value());
@@ -955,35 +1011,6 @@ class Parser
     }
 
     /**
-     * Identifier ::= string
-     *
-     * @return string
-     */
-    private function Identifier()
-    {
-        // ~~check if we have an annotation~~
-        if ($this->lexer->isNextTokenAny(self::$classIdentifiers)) {
-	        $this->lexer->moveNext();
-
-	        $className = $this->lexer->token['value'];
-
-	        while ($this->lexer->lookahead['position'] === ($this->lexer->token['position'] + strlen($this->lexer->token['value']))
-		        && $this->lexer->isNextToken(Lexer::T_NAMESPACE_SEPARATOR)) {
-
-		        $this->match(Lexer::T_NAMESPACE_SEPARATOR);
-		        $this->matchAny(self::$classIdentifiers);
-
-		        $className .= '\\' . $this->lexer->token['value'];
-	        }
-
-	        return $className;
-        }
-
-        $identifier = $this->lexer->token['value'];
-        return $identifier;
-    }
-
-    /**
      * Value ::= PlainValue | FieldAssignment
      *
      * @return mixed
@@ -999,11 +1026,13 @@ class Parser
         return $this->PlainValue();
     }
 
-    /**
-     * PlainValue ::= integer | string | float | boolean | Array | Annotation
-     *
-     * @return mixed
-     */
+	/**
+	 * PlainValue ::= integer | string | float | boolean | Array | Annotation
+	 *
+	 * @return mixed
+	 * @throws AnnotationException
+	 * @throws \ReflectionException
+	 */
     private function PlainValue()
     {
         if ($this->lexer->isNextToken(Lexer::T_OPEN_CURLY_BRACES)) {
@@ -1048,12 +1077,14 @@ class Parser
         }
     }
 
-    /**
-     * FieldAssignment ::= FieldName "=" PlainValue
-     * FieldName ::= identifier
-     *
-     * @return \stdClass
-     */
+	/**
+	 * FieldAssignment ::= FieldName "=" PlainValue
+	 * FieldName ::= identifier
+	 *
+	 * @return \stdClass
+	 * @throws AnnotationException
+	 * @throws \ReflectionException
+	 */
     private function FieldAssignment()
     {
         $this->match(Lexer::T_IDENTIFIER);
@@ -1068,11 +1099,12 @@ class Parser
         return $item;
     }
 
-    /**
-     * Array ::= "{" ArrayEntry {"," ArrayEntry}* [","] "}"
-     *
-     * @return array
-     */
+	/**
+	 * Array ::= "{" ArrayEntry {"," ArrayEntry}* [","] "}"
+	 *
+	 * @return array
+	 * @throws AnnotationException
+	 */
     private function Arrayx()
     {
         $array = $values = array();
@@ -1114,13 +1146,15 @@ class Parser
         return $array;
     }
 
-    /**
-     * ArrayEntry ::= Value | KeyValuePair
-     * KeyValuePair ::= Key ("=" | ":") PlainValue | Constant
-     * Key ::= string | integer | Constant
-     *
-     * @return array
-     */
+	/**
+	 * ArrayEntry ::= Value | KeyValuePair
+	 * KeyValuePair ::= Key ("=" | ":") PlainValue | Constant
+	 * Key ::= string | integer | Constant
+	 *
+	 * @return array
+	 * @throws AnnotationException
+	 * @throws \ReflectionException
+	 */
     private function ArrayEntry()
     {
         $peek = $this->lexer->glimpse();

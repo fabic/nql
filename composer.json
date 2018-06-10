@@ -21,9 +21,14 @@
     }
   },
   "require": {
-    "php" : ">=7.0"
+    "php": ">=7.0",
+    "doctrine/lexer": "^1.0.1"
   },
   "require-dev": {
+  },
+  "suggests": {
+    "laravel/framework": "^5.4.0",
+    "doctrine/cache": "^1.6.0"
   },
   "config": {
     "sort-packages": true

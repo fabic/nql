@@ -19,6 +19,13 @@ class EloquentOrm extends AbstractDataSource
 	 */
 	protected $logger;
 
+	/**
+	 * EloquentOrm constructor.
+	 *
+	 * @param DatabaseManager $dbm unused
+	 * @param Parser          $nqlQueryParser
+	 * @param LoggerInterface $logger
+	 */
 	public function __construct(DatabaseManager $dbm, Parser $nqlQueryParser, LoggerInterface $logger)
 	{
 		$this->nqlQueryParser = $nqlQueryParser;

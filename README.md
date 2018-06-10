@@ -2,6 +2,15 @@
 
 _Or maybe it is something like “GraphQL for the rest of us” ;-_
 
+__EDIT/2018-06-10/v0.0.1:__ publishing to packagist, even though it's in very early stages of development.
+
+## Use cases
+
+* as an “extended” Symfony Property Path grammar ?.
+* as an alternative to GraphQL ?
+* at least for rapid prototyping client-side JS.
+* ...
+
 ## Getting started
 
 ### TODO: publish to Packagist
@@ -29,9 +38,7 @@ Header always set "Access-Control-Allow-Methods" "GET, POST, OPTIONS, PUT, DELET
 
 ```php
 /* routes/api.php */
-Route::post('/dude', function (Request $request, ContainerInterface $container) {
-    if (!$container instanceof \Illuminate\Foundation\Application)
-        throw new \InvalidArgumentException("Dude! this can't be!");
+Route::post('/dude', function (Request $request) {
 
     $query = $request->getContent();
 
@@ -42,13 +49,8 @@ Route::post('/dude', function (Request $request, ContainerInterface $container) 
     $entities = $parser->parse($query);
 
     $result = $parser->apply($entities, [
-        // 'users' => \App\User::all(),
 
-        // Or:
         'users' => function(array &$meta, PropertyAccessorInterface $pa) {
-            // $columns = !empty($meta['properties']) ? array_keys($meta['properties']) : ['*'];
-            $columns = FALSE && !empty($meta['properties']) ? array_map(function(array $props) { return reset($props); }, $meta['properties']) : ['*'];
-            // FIXME: if user requests 'country' which is actually an FK 'country_id'...
             if (! empty($meta['identifier'])) {
                 $user = \App\User::find($meta['identifier']);
                 return $user;
@@ -65,6 +67,7 @@ Route::post('/dude', function (Request $request, ContainerInterface $container) 
             $states = \DB::table('orders')->groupBy('state')->get(['state'])->pluck('state');
             return $states;
         }
+
     ]);
 
     return $result;
@@ -77,8 +80,8 @@ Route::post('/dude', function (Request $request, ContainerInterface $container) 
 $ curl -D /dev/stderr \
     -H "Content-Type: application/not+graphql" \
     -H "Accept: application/json" \
-    --cookie "XDEBUG_SESSION=PHPSTORM; path=/; domain=.gosoko.local;" \
-    -X POST http://api.gosoko.local/api/dude \
+    --cookie "XDEBUG_SESSION=PHPSTORM; path=/; domain=.localdomain;" \
+    -X POST http://localhost/api/nql/query \
     -d '
 users | randomize | sort: updated_at | limit: 25 {
     id, name, surname, email,
@@ -94,10 +97,6 @@ order:states
   | jq -rC '.'
 ```
 
-## Use cases
-
-* as an “extended” grammar Symfony Property Path.
-
 ## ChangeLog
 
 * 0.0.1 / 2018-06-10 : proof-of-concept impl.
@@ -107,7 +106,8 @@ order:states
 * Thanks to the folks of `\Doctrine\Common\Annotations` which implementation
   was used as a starting point for the Lexer and Parser classes.
 
-## Note to self
+
+## Notes to self
 
 ### Development setup
 

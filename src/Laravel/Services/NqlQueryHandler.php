@@ -51,7 +51,8 @@ class NqlQueryHandler implements NqlQueryHandlerContract
 		$entities = $this->nqlQueryParser->parse($query);
 		$result = [];
 
-		foreach($this->dataSources as $dataSource) {
+		foreach($this->dataSources as $dataSource)
+		{
 			$this->logger->debug(sprintf("Nql: Applying query to data source '%s'", get_class($dataSource)));
 			$res = $dataSource->apply( $entities );
 			$result = array_merge_recursive($result, $res);
