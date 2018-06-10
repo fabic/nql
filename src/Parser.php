@@ -205,46 +205,49 @@ class Parser
 			}
 
 			// ~~ Proceed with those modifiers (randomize, sort, limit, where, etc.) ~~
-			// TODO: Have a $meta['modifiers'] list so that we can chain modifiers in any order.
-			// todo: index
-			// todo: where
+			// todo: index, where, etc.
 
-			// Randomize
-			if (! empty($meta['randomize'])) {
-				if (!is_array($thing)) {
-					throw new \InvalidArgumentException(
-						"Randomize: Ouch! that \"thing\" should be an array by now,"
-						. " got: " . get_class($thing));
-				}
-				shuffle($thing);
-				\Log::debug("Randomized \$thing");
-			}
-
-			// Sort
-			if (! empty($meta['sort'])) {
-				if (!is_array($thing)) {
-					throw new \InvalidArgumentException(
-						"Sort: Ouch! that \"thing\" should be an array by now,"
-						. " got: " . get_class($thing));
-				}
-				$props =& $meta['sort'];
-				usort($thing, function ($left, $right) use ($props, $pa) {
-					foreach ($props as $prop => $dir) {
-						$l = $pa->getValue($left, "[$prop]");
-						$r = $pa->getValue($right, "[$prop]");
-						$e = ($l < $r ? -1 : ($l > $r ? 1 : (0)));
-						if ($e != 0)
-							return $dir == true ? $e : -$e;
+			foreach($meta['modifiers'] as [$modifier, $params])
+			{
+				switch ($modifier) // ugly switch-case that is.
+				{
+					case 'randomize':
+						if (!is_array($thing)) {
+							throw new \InvalidArgumentException(
+								"Randomize: Ouch! that \"thing\" should be an array by now,"
+								. " got: " . gettype($thing));
+						}
+						shuffle($thing);
+						\Log::debug("Nql: Parser::apply: Randomized \$thing.");
+						break;
+					// fixme: this is certainly inefficient, but we may not do anything about that right now.
+					case 'sort': {
+						if (!is_array($thing)) {
+							throw new \InvalidArgumentException(
+								"Sort: Ouch! that \"thing\" should be an array by now,"
+								. " got: " . get_class($thing));
+						}
+						usort($thing, function ($left, $right) use ($params, $pa) {
+							foreach ($params as $prop => $dir) {
+								$l = $pa->getValue($left, "[$prop]");
+								$r = $pa->getValue($right, "[$prop]");
+								$e = ($l < $r ? -1 : ($l > $r ? 1 : (0)));
+								if ($e != 0)
+									return $dir == true ? $e : -$e;
+							}
+							return 0;
+						});
+						\Log::debug("Nql: Parser::apply: Sorted \$thing.");
+						break;
 					}
-					return 0;
-				});
-				unset($props);
-			}
-
-			// Limit
-			if (! empty($meta['limit'])) {
-				$thing = array_slice($thing, $meta['limit'][0], $meta['limit'][1]);
-			}
+					case 'limit':
+						$thing = array_slice($thing, $params[0], $params[1]);
+						break;
+					default:
+						\Log::warning("Nql: parser::apply : unknown modifier '$modifier', payload: '$params'.");
+				}
+			} // modifiers iter. //
+			unset($modifier, $params);
 
 			$retv[ $alias ] = $thing;
 		}
@@ -303,19 +306,8 @@ class Parser
 			'ppath'      => $name,  // a property path ?
 			'properties' => null,
 			'identifier' => null,   // #1234 // #abcdef // #abc-def-123 ?
-			// TODO: file these "pipe modifiers" under some inner list, as a tuple [<modifier>, <value>]
-			// TODO: so that we can chain modifiers in order, and invoke one several times.
-			'sort'       => null,   // sort: created_at desc, name asc
-			'where'      => null,   // where: id > 100 // where: name is not null, description is null
-									// where: id in (1,2,3,4) // where: has(comments).
-			'filter'     => null,
-			'map'        => null,
-			'first'      => null,  // first // first: 10
-			'last'       => null,  // last // last: 10
-			'any'        => null,
-			'count'      => null,
-			'limit'      => null,  // limit: 10 // limit: 2, 10
-			'randomize'  => null,
+			'modifiers'  => [
+			]
 		];
 
 		// "#"<number>
@@ -333,26 +325,42 @@ class Parser
 			$name = $this->lexer->token['value'];
 		}
 
-		// todo: refactor these modifiers thing.
-		while ($this->lexer->lookahead['type'] == Lexer::T_PIPE) {
+		// Modifiers :
+		// sort
+		// where         //  where: id > 100         //  where: name is not null, description is null
+		//               //  where: id in (1,2,3,4)  //  where: has(comments).
+		// filter  ?
+		// map     ?
+		// first        // first // first: 10
+		// last         // last  //  last: 10
+		// any
+		// count
+		// limit
+		// randomize
+
+		while ($this->lexer->lookahead['type'] == Lexer::T_PIPE)
+		{
 			$this->match(Lexer::T_PIPE);
-			$token = $this->lexer->token;
-			switch($this->lexer->lookahead['value']) {
+			switch ($this->lexer->lookahead['value'])
+			{
+				// sort: created_at desc, name asc
 				case 'sort':
-					$meta['sort'] = $this->SortModifier();
+					$meta['modifiers'][] = ['sort', $this->SortModifier()];
 					break;
+				// limit: 10 // limit: 2, 10
 				case 'limit':
-					$meta['limit'] = $this->LimitModifier();
+					$meta['modifiers'][] = ['limit', $this->LimitModifier()];
 					break;
 				case 'randomize':
 					$this->match(Lexer::T_IDENTIFIER);
-					$meta['randomize'] = true;
+					$meta['modifiers'][] = ['randomize', true];
 					break;
+				// TODO: impl. these other modifiers.
+				// Default to parsing a “generic modifier” that is either:
+				// - a single keyword, like ex. 'randomize'
+				// - or `keyword: anything but the pipe character`.
 				default:
-					// todo: impl. generic pipe func. parser :: i.e. accept anything we don't know
-					// todo: about so that client code may extend things without too much hassle.
-					// todo: for ex. we may attempt to parse anything until we meet a '|' pipe character.
-					throw new \InvalidArgumentException("Unknown \"pipe\" identifier: {$token['value']}.");
+					$meta['modifiers'][] = $this->unknownModifier();
 			}
 		}
 
@@ -433,12 +441,45 @@ class Parser
 		return [$first, $count];
 	}
 
+	/**
+	 * Unknown ::= identifier [':' (<anything_but_pipe>)* ]
+	 *
+	 * @return array [keyword, payload].
+	 *
+	 * @throws Exceptions\ParserException
+	 */
+	private function unknownModifier()
+	{
+		$this->match(Lexer::T_IDENTIFIER);
+		$keyword = $this->lexer->token['value'];
+
+		$payload = null;
+
+		if ($this->lexer->lookahead['type'] == Lexer::T_COLON) {
+			$this->match(Lexer::T_COLON);
+			$fragments = [];
+			while ($this->lexer->lookahead !== null
+				&& $this->lexer->lookahead['type'] !== Lexer::T_PIPE)
+			{
+				$this->lexer->moveNext();
+				$fragment = $this->lexer->token['value'];
+				array_push($fragments, $fragment);
+				// ^ we do this in this way since Doctrine's Lexer won't allow
+				//   us to access the input string, nor extract a slice of it.
+			}
+			$payload = implode(' ', $fragments);
+		}
+
+		return [$keyword, $payload];
+	}
+
 
 	//==-------------------------------------------------------------------==//
 	//==-- Support routines, most of which come from Doctrine's          --==//
 	//==-- annotations parser                                            --==//
 	//==-------------------------------------------------------------------==//
 
+	
 	/**
 	 * Attempts to match the given token with the current lookahead token.
 	 * If they match, updates the lookahead token; otherwise raises a syntax error.
