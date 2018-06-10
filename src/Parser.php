@@ -20,6 +20,7 @@
 namespace Fabic\Nql;
 
 use Doctrine\Common\Annotations\AnnotationException; // todo: have our own exception cls.
+use Psr\Log\LoggerInterface;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\PropertyAccess\PropertyAccessorInterface;
 
@@ -62,12 +63,20 @@ class Parser
      */
     private $lexer;
 
-    /**
-     * Constructs a new DocParser.
-     */
-    public function __construct()
+	/**
+	 * @var LoggerInterface
+	 */
+    protected $logger;
+
+	/**
+	 * Constructs a new NQL Parser.
+	 *
+	 * @param LoggerInterface $logger
+	 */
+    public function __construct(LoggerInterface $logger)
     {
-        $this->lexer = new Lexer;
+        $this->lexer = new Lexer();
+        $this->logger = $logger;
     }
 
 	/**
@@ -76,6 +85,7 @@ class Parser
 	 * @param string $input The NQL query string to parse.
 	 *
 	 * @return array
+	 *
 	 * @throws Exceptions\ParserException
 	 */
     public function parse($input)
@@ -97,7 +107,9 @@ class Parser
 	 * TODO: SRP: once we can come up with a name for it, like Nql maybe?
 	 *
 	 * @param array $entities that which `parse()` yields.
-	 * @param mixed $root     the “root” data to be operated upon.
+	 * @param mixed $root     the “root” data to be operated upon; may be
+	 *   a callable that takes arguments: ($ppath, $meta), i.e. the current
+	 *   property path and metadata we're operating upon.
 	 *
 	 * @param PropertyAccessorInterface|null $pa
 	 *
@@ -116,19 +128,33 @@ class Parser
 			$ppath = $meta['ppath'];
 
 			// todo: identifier may be a property path.
-			if (is_array($root) || $root instanceof \ArrayAccess)
-				$thing = $pa->getValue($root, "[$ppath]");
-            // fixme: filter out those things we can't traverse.
-            else if (is_scalar($root) || is_null($root))
-                return null;
-			else
-				$thing = $pa->getValue($root, $ppath);
 
+			// $root may be a callable for cases where the callee does not know
+			// in advance if it knows about that $ppath.
+			if (is_callable($root)) {
+				$thing = call_user_func($root, $ppath, $meta);
+			}
+			// Symf's ppath component wants arrays to be accessed as `[$ppath]`.
+			else if (is_array($root) || $root instanceof \ArrayAccess)
+				$thing = $pa->getValue($root, "[$ppath]");
+            // We need to filter out those things we can't traverse.
+            else if (is_scalar($root) || is_null($root)) {
+            	$this->logger->warning("Nql: Got a nil \$root of type " . gettype($root));
+	            return null;
+            }
+            // before we let the ppath component do it's best to traverse $root.
+			else {
+				$thing = $pa->getValue($root, $ppath);
+			}
+
+			// And $thing _may also_ be a callable for the ability for
+			// client code to impl. some form of lazy evaluation.
 			if (is_callable($thing)) {
 				$thing = $thing($meta, $pa);
 			}
 
-			// Laravel's Eloquent/ORM
+			// Laravel's Eloquent/ORM relation
+			// todo: if class_exists()... since Laravel is optional.
 			if ($thing instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
 				$thing = $thing->get();
 			}
@@ -136,19 +162,22 @@ class Parser
 				$thing = $thing->format('c');
 			}
 
+			// “Transform traversable non-arrays”
 			// There are "good" reasons not to perform this upfront:
 			// we may want to keep the actual type of that "thing" for
 			// as long as we can so that we can extract properties that
-			// may be filtered by whatever impl. of \ArrayAccess we're
-			// working with.
+			// may be filtered by whatever impl. of \ArrayAccess or \Traversable
+			// we're working with.
 			if (false) {
 				if (!is_array($thing) && $thing instanceof \Traversable) {
 					$thing = iterator_to_array($thing);
 				}
 			}
 
-			// Recurs. apply sub-query.
-			if (! empty($meta['properties'])) {
+			// Recurs. apply sub-query <=> we have more property paths
+			// to apply to $thing.
+			if (! empty($meta['properties']))
+			{
 				if (is_array($thing) || $thing instanceof \Traversable) {
 					$_thing = [];
 					foreach ($thing as $_key => $_elt) {
@@ -175,6 +204,8 @@ class Parser
 				$thing = iterator_to_array($thing);
 			}
 
+			// ~~ Proceed with those modifiers (randomize, sort, limit, where, etc.) ~~
+			// TODO: Have a $meta['modifiers'] list so that we can chain modifiers in any order.
 			// todo: index
 			// todo: where
 
@@ -214,7 +245,6 @@ class Parser
 			if (! empty($meta['limit'])) {
 				$thing = array_slice($thing, $meta['limit'][0], $meta['limit'][1]);
 			}
-
 
 			$retv[ $alias ] = $thing;
 		}
@@ -319,7 +349,9 @@ class Parser
 					$meta['randomize'] = true;
 					break;
 				default:
-					// todo: impl. generic pipe func. parser.
+					// todo: impl. generic pipe func. parser :: i.e. accept anything we don't know
+					// todo: about so that client code may extend things without too much hassle.
+					// todo: for ex. we may attempt to parse anything until we meet a '|' pipe character.
 					throw new \InvalidArgumentException("Unknown \"pipe\" identifier: {$token['value']}.");
 			}
 		}
@@ -403,7 +435,8 @@ class Parser
 
 
 	//==-------------------------------------------------------------------==//
-	//==-------------------------------------------------------------------==//
+	//==-- Support routines, most of which come from Doctrine's          --==//
+	//==-- annotations parser                                            --==//
 	//==-------------------------------------------------------------------==//
 
 	/**
@@ -482,6 +515,7 @@ class Parser
 	 *
 	 * @return string
 	 * @throws Exceptions\ParserException
+	 *
 	 * @author Doctrine folks.
 	 */
 	private function Identifier()

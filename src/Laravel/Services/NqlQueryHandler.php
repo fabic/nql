@@ -43,6 +43,7 @@ class NqlQueryHandler implements NqlQueryHandlerContract
 	 *
 	 * @param string $query
 	 * @return array
+	 * @throws \Fabic\Nql\Exceptions\ParserException
 	 */
 	public function handle($query)
 	{

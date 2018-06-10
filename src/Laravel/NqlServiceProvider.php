@@ -66,9 +66,11 @@ class NqlServiceProvider extends ServiceProvider
 		    'nql'
 	    );
 
-	    $this->app->singleton(Parser::class, function() {
-	    	return new Parser();
-	    });
+	    $this->app->singleton(Parser::class,
+		    function (Application $app) {
+			    $logger = $app->make($this->getAppConfig()->get('nql.logger'));
+			    return new Parser($logger);
+		    });
 
 	    $this->app->alias(Parser::class, 'nql.query.parser');
 
@@ -81,12 +83,11 @@ class NqlServiceProvider extends ServiceProvider
 	    $this->app->singleton(
 		    Services\NqlQueryHandler::class,
 		    function (Application $app) {
-			    $dataSources = $app->tagged('nql.data.source');
 			    $nqlParser = $app->make('nql.query.parser');
+			    $dataSources = $app->tagged('nql.data.source');
 			    $logger = $app->make( $this->getAppConfig()->get('nql.logger') );
 			    return new Services\NqlQueryHandler($nqlParser, $dataSources, $logger);
-		    }
-	    );
+		    });
 
 	    $this->app->alias(Services\NqlQueryHandler::class, 'nql');
 
@@ -96,12 +97,11 @@ class NqlServiceProvider extends ServiceProvider
 		    DataSources\EloquentOrm::class,
 		    function (Application $app) {
 		    	/** @var \Illuminate\Database\DatabaseManager $db */
-		    	$db = $app->make('db');
+		    	$db = $app->make('db'); // fixme: actually unused.
 			    $nqlParser = $app->make('nql.query.parser');
 			    $logger = $app->make( $this->getAppConfig()->get('nql.logger') );
 			    return new DataSources\EloquentOrm($db, $nqlParser, $logger);
-		    }
-	    );
+		    });
 
 	    $this->app->tag([DataSources\EloquentOrm::class], ['nql.data.source']);
 
