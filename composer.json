@@ -1,0 +1,40 @@
+{
+  "name": "fabic/nql",
+  "description": "NQL is not GraphQL, but some sort of GraphQL-like impl. for the Rest of us.",
+  "keywords": ["composer", "package", "Laravel", "GraphQL", "REST"],
+  "type": "library",
+  "license": "MIT",
+  "homepage": "http://fabic.net",
+  "authors": [{"name": "Fabien Cadet", "email": "cadet.fabien@gmail.com",
+               "homepage": "http://fabic.net", "role": "Developer" } ],
+  "minimum-stability": "stable",
+  "autoload": {
+    "psr-4": {
+      "Fabic\\Nql\\": "src"
+    },
+    "files": [
+    ]
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Fabic\\Nql\\": "tests"
+    }
+  },
+  "require": {
+    "php" : ">=7.0"
+  },
+  "require-dev": {
+  },
+  "config": {
+    "sort-packages": true
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+      ]
+    }
+  },
+  "scripts": {
+    "test": "phpunit"
+  }
+}
