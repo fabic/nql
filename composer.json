@@ -31,7 +31,10 @@
   "extra": {
     "laravel": {
       "providers": [
-      ]
+        "\\Fabic\\Nql\\Laravel\\NqlServiceProvider"
+      ],
+      "aliases": {
+      }
     }
   },
   "scripts": {

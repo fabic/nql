@@ -4,7 +4,19 @@ _Or maybe it is something like “GraphQL for the rest of us” ;-_
 
 ## Getting started
 
-### CORS
+### TODO: publish to Packagist
+
+```bash
+$ composer require fabic/nql
+```
+
+### Publish config/nql.php file
+
+```bash
+$ ./artisan vendor:publish --provider="Fabic\Nql\Laravel\NqlServiceProvider" -vvv
+```
+
+### Setup CORS
 
 ```apacheconfig
 Header always set Access-Control-Allow-Origin "*"
@@ -81,6 +93,10 @@ order:states
 ' \
   | jq -rC '.'
 ```
+
+## Use cases
+
+* as an “extended” grammar Symfony Property Path.
 
 ## ChangeLog
 

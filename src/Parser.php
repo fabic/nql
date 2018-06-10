@@ -58,7 +58,7 @@ class Parser
     /**
      * The lexer.
      *
-     * @var \App\Fabic\Lexer
+     * @var Lexer
      */
     private $lexer;
 
