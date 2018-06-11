@@ -13,28 +13,86 @@ __EDIT/2018-06-10/v0.0.1:__ publishing to packagist, even though it's in very ea
 
 ## Getting started
 
-### TODO: publish to Packagist
-
 ```bash
 $ composer require fabic/nql
 ```
 
-### Publish config/nql.php file
+## It might work without further configuration
+
+A route for `/api/nql/query` should exists that accepts a query as POST body.
+
+Test with Curl:
 
 ```bash
-$ ./artisan vendor:publish --provider="Fabic\Nql\Laravel\NqlServiceProvider" -vvv
+$ curl -D /dev/stderr \
+    -H "Content-Type: application/not+graphql" \
+    -H "Accept: application/json" \
+    -X POST http://localhost/api/nql/query \
+    -d '\App\User { id, email, username, created_at, updated_at, roles }
+'
 ```
 
-### Setup CORS
+### Laravel 5.4.x : Declare the service provider.
+
+```php
+// config/app.php
+return [
+    // ...
+    'providers' => [
+        // ...
+        Fabic\Nql\Laravel\NqlServiceProvider::class,
+    ]
+    // ...
+];
+```
+
+### Optional: Publish config/nql.php file
+
+```bash
+$ ./artisan vendor:publish -v --provider="Fabic\Nql\Laravel\NqlServiceProvider"
+```
+
+### Optional: Setup CORS wrt. app that serves subdomains.
 
 ```apacheconfig
-Header always set Access-Control-Allow-Origin "*"
 Header always set Access-Control-Max-Age "1000"
 Header always set Access-Control-Allow-Headers "X-Requested-With, Content-Type, Origin, Authorization, Accept, Client-Security-Token, X-Custom-Header"
 Header always set "Access-Control-Allow-Methods" "GET, POST, OPTIONS, PUT, DELETE"
+
+#Header always set Access-Control-Allow-Origin "*"
+SetEnvIf Origin ^(https?://(?:.+\.)?(example.net|elsewhere.org|whatever.com)(?::\d{1,5})?)$  CORS_ALLOW_ORIGIN=$1
+Header append Access-Control-Allow-Origin  %{CORS_ALLOW_ORIGIN}e  env=CORS_ALLOW_ORIGIN
+
+# This one is recommanded too, why? I can't remember.
+Header merge  Vary "Origin"
 ```
 
+#### Access-Control-Allow-Credentials true
+
+And also for XHR/Ajax requests to be received with credentials (i.e. authenticated) :
+
+```apacheconfig
+Header append Access-Control-Allow-Credentials true  env=CORS_ALLOW_ORIGIN
+```
+
+So that one would for ex. with jQuery :
+
+```javascript
+$.ajax({
+	type: 'POST',
+	url: 'http://hyperion.example.net',
+	data: $('form#nql-query').serialize(),
+	xhrFields: { withCredentials: true },   //< (!)
+	success: function (data) {
+		console.log("RESPONSE", data);
+	}
+});
+```
+
+
 ### Laravel API route decl.
+
+By means of a closure, directely in `routes/api.php` :
 
 ```php
 /* routes/api.php */
