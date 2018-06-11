@@ -479,7 +479,7 @@ class Parser
 	//==-- annotations parser                                            --==//
 	//==-------------------------------------------------------------------==//
 
-	
+
 	/**
 	 * Attempts to match the given token with the current lookahead token.
 	 * If they match, updates the lookahead token; otherwise raises a syntax error.
