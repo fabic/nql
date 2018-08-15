@@ -194,7 +194,7 @@ class Parser
 			// Indeed this happens a lot, obviously.
 			if (false) {
 				if ($thing instanceof \ArrayAccess && !($thing instanceof \Traversable)) {
-					\Log::notice("Beware! that \$thing we're working with implements \\ArrayAccess"
+					$this->logger->notice("Beware! that \$thing we're working with implements \\ArrayAccess"
 						. " but _not_ \\Traversable, is-a: " . get_class($thing));
 				}
 			}
@@ -218,7 +218,7 @@ class Parser
 								. " got: " . gettype($thing));
 						}
 						shuffle($thing);
-						\Log::debug("Nql: Parser::apply: Randomized \$thing.");
+						$this->logger->debug("Nql: Parser::apply: Randomized \$thing.");
 						break;
 					// fixme: this is certainly inefficient, but we may not do anything about that right now.
 					case 'sort': {
@@ -237,14 +237,14 @@ class Parser
 							}
 							return 0;
 						});
-						\Log::debug("Nql: Parser::apply: Sorted \$thing.");
+						$this->logger->debug("Nql: Parser::apply: Sorted \$thing.");
 						break;
 					}
 					case 'limit':
 						$thing = array_slice($thing, $params[0], $params[1]);
 						break;
 					default:
-						\Log::warning("Nql: parser::apply : unknown modifier '$modifier', payload: '$params'.");
+						$this->logger->warning("Nql: parser::apply : unknown modifier '$modifier', payload: '$params'.");
 				}
 			} // modifiers iter. //
 			unset($modifier, $params);
@@ -280,7 +280,7 @@ class Parser
 			$lookahead = $this->lexer->lookahead;
 
 			if ($lookahead['type'] != Lexer::T_COMMA) {
-				\Log::debug("Entities :: loop :: break.");
+				$this->logger->debug("Entities :: loop :: break.");
 				break;
 			}
 
